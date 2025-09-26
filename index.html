@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Paraglider Autonomous Landing Simulation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.3.1"></script>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .chart-container {
+            position: relative;
+            height: 40vh;
+            width: 100%;
+        }
+        /* Custom scrollbar for better aesthetics in dark mode */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #2d3748; /* gray-800 */
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #4a5568; /* gray-600 */
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #718096; /* gray-500 */
+        }
+    </style>
+    <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
+</head>
+<body class="bg-gray-900 text-gray-200">
+
+    <div class="flex flex-col lg:flex-row h-screen">
+        <!-- Control Panel -->
+        <div class="w-full lg:w-1/4 bg-gray-800 p-4 overflow-y-auto shadow-lg">
+            <h1 class="text-2xl font-bold mb-4 text-white">GNC Simulation</h1>
+            
+            <div id="controls-form">
+                <h2 class="text-lg font-semibold mb-2 border-b border-gray-600 pb-1 text-teal-300">Position</h2>
+                <div class="grid grid-cols-2 gap-2 mb-4">
+                    <div>
+                        <label for="start-lat" class="text-sm">Start Lat</label>
+                        <input type="number" step="any" id="start-lat" value="-7.276595" class="w-full bg-gray-700 p-1 rounded border border-gray-600 text-sm">
+                    </div>
+                    <div>
+                        <label for="start-lon" class="text-sm">Start Lon</label>
+                        <input type="number" step="any" id="start-lon" value="112.794020" class="w-full bg-gray-700 p-1 rounded border border-gray-600 text-sm">
+                    </div>
+                     <div>
+                        <label for="target-lat" class="text-sm">Target Lat</label>
+                        <input type="number" step="any" id="target-lat" value="-7.275000" class="w-full bg-gray-700 p-1 rounded border border-gray-600 text-sm">
+                    </div>
+                    <div>
+                        <label for="target-lon" class="text-sm">Target Lon</label>
+                        <input type="number" step="any" id="target-lon" value="112.794020" class="w-full bg-gray-700 p-1 rounded border border-gray-600 text-sm">
+                    </div>
+                </div>
+
+                <h2 class="text-lg font-semibold mb-2 border-b border-gray-600 pb-1 text-teal-300">Environment</h2>
+                <div class="grid grid-cols-2 gap-2 mb-4">
+                     <div>
+                        <label for="start-alt" class="text-sm">Start Alt (m)</label>
+                        <input type="number" id="start-alt" value="120" class="w-full bg-gray-700 p-1 rounded border border-gray-600 text-sm">
+                    </div>
+                     <div>
+                        <label for="start-hdg" class="text-sm">Start Hdg (°)</label>
+                        <input type="number" id="start-hdg" value="90" class="w-full bg-gray-700 p-1 rounded border border-gray-600 text-sm">
+                    </div>
+                     <div>
+                        <label for="wind-speed-ms" class="text-sm">Wind Spd (m/s)</label>
+                        <input type="number" id="wind-speed-ms" value="5" class="w-full bg-gray-700 p-1 rounded border border-gray-600 text-sm">
+                    </div>
+                     <div>
+                        <label for="wind-from-deg" class="text-sm">Wind Dir (°)</label>
+                        <input type="number" id="wind-from-deg" value="180" class="w-full bg-gray-700 p-1 rounded border border-gray-600 text-sm">
+                    </div>
+                </div>
+
+                <h2 class="text-lg font-semibold mb-2 border-b border-gray-600 pb-1 text-teal-300">Guidance</h2>
+                <div class="grid grid-cols-2 gap-2 mb-4">
+                     <div>
+                        <label for="loiter-radius" class="text-sm">Loiter Rad (m)</label>
+                        <input type="number" id="loiter-radius" value="30" class="w-full bg-gray-700 p-1 rounded border border-gray-600 text-sm">
+                    </div>
+                     <div>
+                        <label for="final-alt" class="text-sm">Final Alt (m)</label>
+                        <input type="number" id="final-alt" value="25" class="w-full bg-gray-700 p-1 rounded border border-gray-600 text-sm">
+                    </div>
+                     <div>
+                        <label for="pad-radius" class="text-sm">Pad Rad (m)</label>
+                        <input type="number" id="pad-radius" value="5" class="w-full bg-gray-700 p-1 rounded border border-gray-600 text-sm">
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex space-x-2 mt-4">
+                <button id="start-sim" class="w-full bg-teal-500 hover:bg-teal-600 text-white font-bold py-2 px-4 rounded transition duration-300">Start</button>
+                <button id="reset-sim" class="w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded transition duration-300">Reset</button>
+            </div>
+            
+            <div id="status-display" class="mt-4 p-3 bg-gray-900 rounded-lg text-sm font-mono leading-relaxed">
+                <p><strong>State:</strong> <span id="status-state">IDLE</span></p>
+                <p><strong>Altitude:</strong> <span id="status-alt">0.0</span> m</p>
+                <p><strong>Distance:</strong> <span id="status-dist">0.0</span> m</p>
+                <p><strong>Ground Spd:</strong> <span id="status-gs">0.0</span> m/s</p>
+                <p><strong>Controls (L/R/B):</strong> <span id="status-controls">0.50/0.50/0.00</span></p>
+            </div>
+
+            <div id="results-display" class="mt-4 p-3 bg-gray-900 rounded-lg text-sm font-mono hidden">
+                 <h2 class="text-lg font-semibold mb-2 text-teal-300">Landing Results</h2>
+                 <p><strong>Miss Distance:</strong> <span id="result-miss">0.00</span> m</p>
+                 <p><strong>Vertical Error:</strong> <span id="result-vert">0.00</span> m</p>
+                 <p><strong>Final G/S:</strong> <span id="result-gs">0.00</span> m/s</p>
+            </div>
+
+        </div>
+
+        <!-- Main Content -->
+        <div class="w-full lg:w-3/4 p-4 grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-900">
+            <div class="bg-gray-800 rounded-lg p-2 shadow-lg"><canvas id="topDownChart"></canvas></div>
+            <div class="bg-gray-800 rounded-lg p-2 shadow-lg"><canvas id="altitudeChart"></canvas></div>
+            <div class="bg-gray-800 rounded-lg p-2 shadow-lg"><div id="path3DChart" class="w-full h-full"></div></div>
+            <div class="bg-gray-800 rounded-lg p-2 shadow-lg"><canvas id="controlsChart"></canvas></div>
+        </div>
+    </div>
+
+    <script>
+        const R_EARTH = 6371000.0;
+        
+        // --- Utility Functions ---
+        const toRad = (deg) => deg * Math.PI / 180;
+        const toDeg = (rad) => rad * 180 / Math.PI;
+
+        function wrap_deg(angle) {
+            while (angle > 180) angle -= 360;
+            while (angle < -180) angle += 360;
+            return angle;
+        }
+
+        function bearing_deg(lat1, lon1, lat2, lon2) {
+            const rlat1 = toRad(lat1);
+            const rlat2 = toRad(lat2);
+            const dlon = toRad(lon2 - lon1);
+            const y = Math.sin(dlon) * Math.cos(rlat2);
+            const x = Math.cos(rlat1) * Math.sin(rlat2) - Math.sin(rlat1) * Math.cos(rlat2) * Math.cos(dlon);
+            return (toDeg(Math.atan2(y, x)) + 360) % 360;
+        }
+
+        function dist_m(lat1, lon1, lat2, lon2) {
+            const dlat = toRad(lat2 - lat1);
+            const dlon = toRad(lon2 - lon1);
+            const a = Math.sin(dlat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dlon / 2) ** 2;
+            return 2 * R_EARTH * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        }
+
+        function step_latlon(lat, lon, vx, vy, dt) {
+            const dN = vy * dt;
+            const dE = vx * dt;
+            const dlat = (dN / R_EARTH) * 180 / Math.PI;
+            const dlon = (dE / (R_EARTH * Math.cos(toRad(lat)))) * 180 / Math.PI;
+            return [lat + dlat, lon + dlon];
+        }
+
+        function _to_local_xy(lat0, lon0, latp, lonp) {
+            const dN = (latp - lat0) * (Math.PI / 180) * R_EARTH;
+            const dE = (lonp - lon0) * (Math.PI / 180) * R_EARTH * Math.cos(toRad(lat0));
+            return { x: dE, y: dN };
+        }
+
+        // --- Simulation Core ---
+        class ParagliderSim {
+            constructor(params) {
+                this.lat = params.start_lat;
+                this.lon = params.start_lon;
+                this.alt = params.start_alt;
+                this.heading = params.start_hdg;
+                this.dt = 0.05; // Fixed for realtime simulation performance
+                this.target = [params.target_lat, params.target_lon];
+
+                this.v_trim_ms = 10.5;
+                this.sink_trim = 1.2;
+                this.sink_max = 4.0;
+                this.max_turn_rate_dps = 45.0;
+
+                const wind_to_rad = toRad((params.wind_from_deg + 180) % 360);
+                this.Wvx = params.wind_speed_ms * Math.sin(wind_to_rad);
+                this.Wvy = params.wind_speed_ms * Math.cos(wind_to_rad);
+
+                [this.CRUISE, this.APPROACH, this.LOITER, this.FINAL, this.FLARE, this.LANDED] = [0, 1, 2, 3, 4, 5];
+                this.state = this.CRUISE;
+                this.state_names = ["CRUISE", "APPROACH", "LOITER", "FINAL", "FLARE", "LANDED"];
+
+                this.approach_radius_m = 75.0;
+                this.loiter_radius_m = params.loiter_radius;
+                this.final_approach_alt_m = params.final_alt;
+                this.flare_alt_m = 5.0;
+                this.landing_pad_radius_m = params.pad_radius;
+
+                this.kp_track = 0.1;
+                this.kp_radius = 4.0;
+                this.kd_radius = 8.0;
+                this.last_radius_error = 0.0;
+                
+                this.target_descent_rate_ms = 2.5;
+                this.kp_descent = 0.1;
+                this.ki_descent = 0.02;
+                this.kd_descent = 0.05;
+                this.descent_integral = 0.0;
+                this.last_descent_error = 0.0;
+
+                this.left = 0.5; this.right = 0.5; this.brake = 0.0;
+                this.max_diff = 0.9;
+
+                // History for plotting
+                this.history = {
+                    time: [], x: [], y: [], alt: [], state: [], left: [], right: [],
+                    brake: [], descent_rate: [],
+                };
+                this.startTime = null;
+                this.lat0 = this.lat;
+                this.lon0 = this.lon;
+            }
+
+            _update_state_machine(dist_to_target) {
+                if (this.state === this.CRUISE && dist_to_target < this.approach_radius_m) this.state = this.APPROACH;
+                if (this.state === this.APPROACH && dist_to_target < this.loiter_radius_m) {
+                    this.state = (this.alt > this.final_approach_alt_m) ? this.LOITER : this.FINAL;
+                }
+                if (this.state === this.LOITER && this.alt <= this.final_approach_alt_m) this.state = this.FINAL;
+                if (this.state === this.FINAL && this.alt <= this.flare_alt_m) this.state = this.FLARE;
+                if ([this.FLARE, this.FINAL].includes(this.state) && this.alt <= 0.1) this.state = this.LANDED;
+            }
+
+            _run_guidance_and_control(brg, dist, cog) {
+                let diff = 0.0;
+
+                if (this.alt <= 0.1) {
+                    this.left = this.right = 0.5;
+                    this.brake = 1.0;
+                    return;
+                }
+                
+                const clip = (val, min, max) => Math.max(min, Math.min(val, max));
+
+                switch (this.state) {
+                    case this.CRUISE: {
+                        const track_error = wrap_deg(brg - cog);
+                        diff = clip(this.kp_track * track_error, -this.max_diff, this.max_diff);
+                        this.left = 0.5 - 0.5 * diff;
+                        this.right = 0.5 + 0.5 * diff;
+                        this.brake = 0.2;
+                        break;
+                    }
+                    case this.FINAL: {
+                        const track_error = wrap_deg(brg - cog);
+                        diff = clip(this.kp_track * track_error, -this.max_diff, this.max_diff);
+                        this.left = 0.5 - 0.5 * diff;
+                        this.right = 0.5 + 0.5 * diff;
+                        
+                        const start_braking_dist = this.loiter_radius_m;
+                        const max_braking_dist = this.landing_pad_radius_m;
+                        const min_brake_final = 0.4;
+                        const max_brake_final = 0.85;
+
+                        if (dist <= max_braking_dist) {
+                            this.brake = max_brake_final;
+                        } else if (dist >= start_braking_dist) {
+                            this.brake = min_brake_final;
+                        } else {
+                            const progress = (start_braking_dist - dist) / (start_braking_dist - max_braking_dist);
+                            this.brake = min_brake_final + progress * (max_brake_final - min_brake_final);
+                        }
+                        this.brake = clip(this.brake, min_brake_final, max_brake_final);
+                        break;
+                    }
+                    case this.APPROACH: {
+                        const track_error = wrap_deg(brg - cog);
+                        diff = clip(this.kp_track * track_error, -this.max_diff, this.max_diff);
+                        this.left = 0.5 - 0.5 * diff;
+                        this.right = 0.5 + 0.5 * diff;
+
+                        const current_sink = this.sink_trim + (this.sink_max - this.sink_trim) * this.brake;
+                        const error = this.target_descent_rate_ms - current_sink;
+                        this.descent_integral += error * this.dt;
+                        const derivative = (error - this.last_descent_error) / this.dt;
+                        this.last_descent_error = error;
+                        const pid_output = (this.kp_descent * error + this.ki_descent * this.descent_integral + this.kd_descent * derivative);
+                        this.brake = clip(this.brake + pid_output, 0.1, 0.9);
+                        break;
+                    }
+                    case this.LOITER: {
+                        const radius_error = dist - this.loiter_radius_m;
+                        const radius_err_deriv = (radius_error - this.last_radius_error) / this.dt;
+                        this.last_radius_error = radius_error;
+
+                        let correction_angle_deg = (this.kp_radius * radius_error) + (this.kd_radius * radius_err_deriv);
+                        correction_angle_deg = clip(correction_angle_deg, -90, 90);
+                        
+                        const tangential_track = (brg + 90) % 360;
+                        const desired_track = wrap_deg(tangential_track - correction_angle_deg);
+                        const track_error = wrap_deg(desired_track - cog);
+                        
+                        diff = clip(this.kp_track * 1.5 * track_error, -this.max_diff, this.max_diff);
+                        this.left = 0.5 - 0.5 * diff;
+                        this.right = 0.5 + 0.5 * diff;
+                        this.brake = 0.35;
+                        break;
+                    }
+                    case this.FLARE:
+                        this.left = 0.5; this.right = 0.5;
+                        this.brake = 1.0;
+                        break;
+                }
+            }
+
+            step() {
+                if (!this.startTime) this.startTime = performance.now();
+                const currentTime = (performance.now() - this.startTime) / 1000;
+
+                const brg = bearing_deg(this.lat, this.lon, ...this.target);
+                const dist = dist_m(this.lat, this.lon, ...this.target);
+
+                const vax = this.v_trim_ms * Math.sin(toRad(this.heading));
+                const vay = this.v_trim_ms * Math.cos(toRad(this.heading));
+                const vx = vax + this.Wvx;
+                const vy = vay + this.Wvy;
+                this.ground_speed = Math.sqrt(vx ** 2 + vy ** 2);
+                const cog = (toDeg(Math.atan2(vx, vy)) + 360) % 360;
+
+                this._update_state_machine(dist);
+                this._run_guidance_and_control(brg, dist, cog);
+
+                const diff = this.right - this.left;
+                const turn_rate = diff * this.max_turn_rate_dps;
+                this.heading = wrap_deg(this.heading + turn_rate * this.dt);
+
+                const sink = this.sink_trim + (this.sink_max - this.sink_trim) * this.brake;
+                this.alt = Math.max(0.0, this.alt - sink * this.dt);
+                
+                [this.lat, this.lon] = step_latlon(this.lat, this.lon, vx, vy, this.dt);
+                
+                const {x, y} = _to_local_xy(this.lat0, this.lon0, this.lat, this.lon);
+                
+                // Log data
+                this.history.time.push(currentTime);
+                this.history.x.push(x);
+                this.history.y.push(y);
+                this.history.alt.push(this.alt);
+                this.history.state.push(this.state);
+                this.history.left.push(this.left);
+                this.history.right.push(this.right);
+                this.history.brake.push(this.brake);
+                this.history.descent_rate.push(sink);
+
+                // Update status display
+                document.getElementById('status-state').textContent = this.state_names[this.state];
+                document.getElementById('status-alt').textContent = this.alt.toFixed(1);
+                document.getElementById('status-dist').textContent = dist.toFixed(1);
+                document.getElementById('status-gs').textContent = this.ground_speed.toFixed(1);
+                document.getElementById('status-controls').textContent = `${this.left.toFixed(2)}/${this.right.toFixed(2)}/${this.brake.toFixed(2)}`;
+
+                return this.state !== this.LANDED;
+            }
+        }
+        
+        // --- Charting and App Logic ---
+        let charts = {};
+        let sim = null;
+        let animationFrameId = null;
+
+        function createCharts() {
+            const chartOptions = (title) => ({
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    title: { display: true, text: title, color: '#e2e8f0' },
+                    legend: { labels: { color: '#e2e8f0' } }
+                },
+                scales: {
+                    x: {
+                        grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                        ticks: { color: '#94a3b8' }
+                    },
+                    y: {
+                        grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                        ticks: { color: '#94a3b8' },
+                        beginAtZero: true
+                    }
+                }
+            });
+            
+            // Top Down Chart (2D path)
+            charts.topDown = new Chart(document.getElementById('topDownChart'), {
+                type: 'scatter',
+                data: {
+                    datasets: [
+                        { label: 'Trajectory', data: [], borderColor: '#38b2ac', showLine: true, pointRadius: 0, tension: 0.1 },
+                        { label: 'Loiter Circle', data: [], borderColor: '#f6e05e', showLine: true, pointRadius: 0, borderDash: [5, 5] },
+                        { label: 'Landing Pad', data: [], borderColor: '#68d391', showLine: true, pointRadius: 0, borderWidth: 2 },
+                        { label: 'Target', data: [], backgroundColor: '#f56565', pointStyle: 'crossRot', radius: 8, borderWidth: 2 }
+                    ]
+                },
+                options: { ...chartOptions('Top-Down View'), scales: { ...chartOptions().scales, x: {...chartOptions().scales.x, title: {display: true, text: 'East (m)', color: '#94a3b8'}}, y: {...chartOptions().scales.y, title: {display: true, text: 'North (m)', color: '#94a3b8'}}}}
+            });
+            
+            // 3D Path Chart with Plotly
+            charts.layout3D = {
+                title: {
+                    text: '3D Trajectory',
+                    font: { color: '#e2e8f0' }
+                },
+                autosize: true,
+                margin: { l: 0, r: 0, b: 0, t: 40 },
+                paper_bgcolor: 'transparent',
+                plot_bgcolor: 'transparent',
+                scene: {
+                    xaxis: { title: 'East (m)', color: '#94a3b8', gridcolor: 'rgba(255, 255, 255, 0.1)', backgroundcolor: '#1f2937' },
+                    yaxis: { title: 'North (m)', color: '#94a3b8', gridcolor: 'rgba(255, 255, 255, 0.1)', backgroundcolor: '#1f2937' },
+                    zaxis: { title: 'Altitude (m)', color: '#94a3b8', gridcolor: 'rgba(255, 255, 255, 0.1)', backgroundcolor: '#1f2937' }
+                }
+            };
+
+            const initialData3D = [{
+                x: [], y: [], z: [],
+                mode: 'lines',
+                type: 'scatter3d',
+                line: {
+                    width: 5,
+                    color: [],
+                    colorscale: 'Viridis' 
+                }
+            }];
+
+            Plotly.newPlot('path3DChart', initialData3D, charts.layout3D, {responsive: true, displaylogo: false});
+
+
+            // Altitude Chart
+            charts.altitude = new Chart(document.getElementById('altitudeChart'), {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        { label: 'Altitude (m)', data: [], borderColor: '#63b3ed', yAxisID: 'y', pointRadius: 0 },
+                        { label: 'Descent Rate (m/s)', data: [], borderColor: '#f687b3', yAxisID: 'y1', pointRadius: 0 }
+                    ]
+                },
+                options: {
+                     ...chartOptions('Altitude & Descent Rate'),
+                     scales: {
+                         x: {...chartOptions().scales.x, title: {display: true, text: 'Time (s)', color: '#94a3b8'}},
+                         y: { type: 'linear', position: 'left', grid: { color: 'rgba(99, 179, 237, 0.2)' }, ticks: { color: '#63b3ed' } },
+                         y1: { type: 'linear', position: 'right', grid: { drawOnChartArea: false }, ticks: { color: '#f687b3' } }
+                     }
+                }
+            });
+
+            // Controls Chart
+            charts.controls = new Chart(document.getElementById('controlsChart'), {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        { label: 'Left', data: [], borderColor: '#68d391', pointRadius: 0 },
+                        { label: 'Right', data: [], borderColor: '#4fd1c5', pointRadius: 0 },
+                        { label: 'Brake', data: [], borderColor: '#ed64a6', pointRadius: 0 }
+                    ]
+                },
+                options: { ...chartOptions('Control Inputs'), scales: { ...chartOptions().scales, x: {...chartOptions().scales.x, title: {display: true, text: 'Time (s)', color: '#94a3b8'}}, y: {...chartOptions().scales.y, min: 0, max: 1}}}
+            });
+        }
+        
+        function updateCharts() {
+            if (!sim) return;
+            
+            const h = sim.history;
+            
+            charts.topDown.data.datasets[0].data = h.x.map((val, i) => ({x: val, y: h.y[i]}));
+            charts.topDown.update('none');
+
+            charts.altitude.data.labels = h.time.map(t => t.toFixed(1));
+            charts.altitude.data.datasets[0].data = h.alt;
+            charts.altitude.data.datasets[1].data = h.descent_rate;
+            charts.altitude.update('none');
+
+            charts.controls.data.labels = h.time.map(t => t.toFixed(1));
+            charts.controls.data.datasets[0].data = h.left;
+            charts.controls.data.datasets[1].data = h.right;
+            charts.controls.data.datasets[2].data = h.brake;
+            charts.controls.update('none');
+
+            // Update Plotly 3D Chart
+            const maxAlt = Math.max(...h.alt, getParams().start_alt);
+            charts.layout3D.scene.zaxis.range = [0, maxAlt * 1.1];
+
+            const trace3D = {
+                x: h.x,
+                y: h.y,
+                z: h.alt,
+                mode: 'lines',
+                type: 'scatter3d',
+                line: {
+                    width: 5,
+                    color: h.alt,
+                    colorscale: 'Viridis'
+                }
+            };
+            Plotly.react('path3DChart', [trace3D], charts.layout3D);
+        }
+
+        function getParams() {
+            const ids = ["start-lat", "start-lon", "target-lat", "target-lon", "start-alt", "start-hdg", "wind-speed-ms", "wind-from-deg", "loiter-radius", "final-alt", "pad-radius"];
+            const params = {};
+            ids.forEach(id => {
+                params[id.replace(/-/g, '_')] = parseFloat(document.getElementById(id).value);
+            });
+            return params;
+        }
+
+        function resetSimulation() {
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+                animationFrameId = null;
+            }
+            sim = null;
+            
+            // Reset Chart.js charts
+            [charts.topDown, charts.altitude, charts.controls].forEach(chart => {
+                chart.data.labels = [];
+                chart.data.datasets.forEach(ds => ds.data = []);
+                chart.update();
+            });
+            
+            // Reset Plotly chart
+            Plotly.react('path3DChart', [{x: [], y: [], z: []}], charts.layout3D);
+
+            document.getElementById('status-state').textContent = 'IDLE';
+            document.getElementById('results-display').classList.add('hidden');
+        }
+        
+        function startSimulation() {
+            resetSimulation();
+            const params = getParams();
+            sim = new ParagliderSim(params);
+
+            // Setup static plot elements for Chart.js
+            const target_local = _to_local_xy(sim.lat0, sim.lon0, params.target_lat, params.target_lon);
+            charts.topDown.data.datasets[3].data = [target_local]; // Target
+            
+            const circle = (radius) => Array.from({length: 50}, (_, i) => {
+                const angle = i / 49 * 2 * Math.PI;
+                return {
+                    x: target_local.x + radius * Math.cos(angle),
+                    y: target_local.y + radius * Math.sin(angle)
+                };
+            });
+            charts.topDown.data.datasets[1].data = circle(params.loiter_radius);
+            charts.topDown.data.datasets[2].data = circle(params.pad_radius);
+            
+            let lastUpdate = 0;
+            const updateInterval = 100; // ms, update charts every 100ms
+
+            function gameLoop(timestamp) {
+                if(!sim.step()) {
+                    // Simulation ended
+                    updateCharts();
+                    displayResults();
+                    return;
+                }
+                
+                if (timestamp - lastUpdate > updateInterval) {
+                    updateCharts();
+                    lastUpdate = timestamp;
+                }
+                
+                animationFrameId = requestAnimationFrame(gameLoop);
+            }
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        function displayResults() {
+             const h = sim.history;
+             const target_local = _to_local_xy(sim.lat0, sim.lon0, sim.target[0], sim.target[1]);
+             const final_x = h.x[h.x.length - 1];
+             const final_y = h.y[h.y.length - 1];
+             
+             const miss_dist = Math.sqrt((final_x - target_local.x)**2 + (final_y - target_local.y)**2);
+             const vert_error = h.alt[h.alt.length - 1];
+             const final_gs = sim.ground_speed;
+
+             document.getElementById('result-miss').textContent = miss_dist.toFixed(2);
+             document.getElementById('result-vert').textContent = vert_error.toFixed(2);
+             document.getElementById('result-gs').textContent = final_gs.toFixed(2);
+             document.getElementById('results-display').classList.remove('hidden');
+        }
+
+        window.onload = () => {
+            createCharts();
+            document.getElementById('start-sim').addEventListener('click', startSimulation);
+            document.getElementById('reset-sim').addEventListener('click', resetSimulation);
+        };
+    </script>
+</body>
+</html>
+
